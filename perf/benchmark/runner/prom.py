@@ -1,3 +1,5 @@
+# Copyright Istio Authors
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -48,12 +50,16 @@ def calculate_average(item, resource_type):
 
 
 def get_average_within_query_time_range(data, resource_type):
-    val_by_pod_name = {"fortio-server": 0}
+    val_by_pod_name = {"fortio-client": 0, "fortio-server": 0, "istio-ingressgateway": 0}
     if data["data"]["result"]:
         for item in data["data"]["result"]:
             pod_name = item["metric"]["pod"]
+            if "fortio-client" in pod_name:
+                val_by_pod_name["fortio-client"] = calculate_average(item, resource_type)
             if "fortio-server" in pod_name:
                 val_by_pod_name["fortio-server"] = calculate_average(item, resource_type)
+            if "istio-ingressgateway" in pod_name:
+                val_by_pod_name["istio-ingressgateway"] = calculate_average(item, resource_type)
     return val_by_pod_name
 
 
@@ -62,6 +68,7 @@ class Prom:
     def __init__(
             self,
             url,
+            token,
             nseconds,
             end=None,
             host=None,
@@ -78,7 +85,7 @@ class Prom:
             self.start = start
             self.end = start + nseconds
 
-        self.headers = {}
+        self.headers = {"Authorization": "Bearer " + token}
         if host is not None:
             self.headers["Host"] = host
         self.aggregate = aggregate
@@ -93,7 +100,7 @@ class Prom:
             "start": self.start,
             "end": self.end,
             "step": 15
-        }, headers=self.headers)
+        }, headers=self.headers, verify=False)
 
         if not resp.ok:
             raise Exception(str(resp))
@@ -114,38 +121,42 @@ class Prom:
             xform=xform,
             aggregate=self.aggregate)
 
-    def fetch_pipy_sidecar_cpu_usage_by_pod_name(self):
-        cpu_query = 'sum(rate(container_cpu_usage_seconds_total{namespace="default", container="sidecar"}[1m])) by (pod)'
+    def fetch_istio_proxy_cpu_usage_by_pod_name(self):
+        cpu_query = 'sum(rate(container_cpu_usage_seconds_total{container="istio-proxy"}[1m])) by (pod)'
         data = self.fetch_by_query(cpu_query)
         avg_cpu_dict = get_average_within_query_time_range(data, "cpu")
         return avg_cpu_dict
 
-    def fetch_pipy_sidecar_memory_usage_by_pod_name(self):
-        mem_query = 'container_memory_usage_bytes{job="kubelet", namespace="default", container="sidecar"}'
+    def fetch_istio_proxy_memory_usage_by_pod_name(self):
+        mem_query = 'container_memory_usage_bytes{container="istio-proxy"}'
         data = self.fetch_by_query(mem_query)
         avg_mem_dict = get_average_within_query_time_range(data, "mem")
         return avg_mem_dict
 
-    def fetch_pipy_sidecar_cpu_and_mem(self):
+    def fetch_istio_proxy_cpu_and_mem(self):
         out = {}
 
-        avg_cpu_dict = self.fetch_pipy_sidecar_cpu_usage_by_pod_name()
-        out["cpu_mili_avg_pipy_sidecar_fortioserver"] = avg_cpu_dict["fortio-server"]
+        avg_cpu_dict = self.fetch_istio_proxy_cpu_usage_by_pod_name()
+        out["cpu_mili_avg_istio_proxy_fortio_client"] = avg_cpu_dict["fortio-client"]
+        out["cpu_mili_avg_istio_proxy_fortio_server"] = avg_cpu_dict["fortio-server"]
+        out["cpu_mili_avg_istio_proxy_istio_ingressgateway"] = avg_cpu_dict["istio-ingressgateway"]
 
-        avg_mem_dict = self.fetch_pipy_sidecar_memory_usage_by_pod_name()
-        out["mem_Mi_avg_pipy_sidecar_fortioserver"] = avg_mem_dict["fortio-server"]
+        avg_mem_dict = self.fetch_istio_proxy_memory_usage_by_pod_name()
+        out["mem_milli_avg_istio_proxy_fortio_client"] = avg_mem_dict["fortio-client"]
+        out["mem_milli_avg_istio_proxy_fortio_server"] = avg_mem_dict["fortio-server"]
+        out["mem_milli_avg_istio_proxy_istio_ingressgateway"] = avg_mem_dict["istio-ingressgateway"]
 
         return out
 
     def fetch_cpu_by_container(self):
         return self.fetch(
-            'irate(container_cpu_usage_seconds_total{namespace="default", container=~"discovery|sidecar|captured|uncaptured"}[1m])',
+            'irate(container_cpu_usage_seconds_total{container=~"discovery|sidecar|captured|uncaptured"}[1m])',
             metric_by_deployment_by_container,
             to_mili_cpus)
 
     def fetch_memory_by_container(self):
         return self.fetch(
-            'container_memory_usage_bytes{job="kubelet", namespace="default", container=~"discovery|sidecar|captured|uncaptured"}',
+            'container_memory_usage_bytes{container=~"discovery|sidecar|captured|uncaptured"}',
             metric_by_deployment_by_container,
             to_mega_bytes)
 
@@ -153,7 +164,7 @@ class Prom:
         out = flatten(self.fetch_cpu_by_container(),
                       "cpu_mili", aggregate=self.aggregate)
         out.update(flatten(self.fetch_memory_by_container(),
-                           "mem_Mi", aggregate=self.aggregate))
+                           "mem_mili", aggregate=self.aggregate))
         return out
 
     def fetch_num_requests_by_response_code(self, code):
@@ -174,17 +185,17 @@ class Prom:
         data_503 = self.fetch_num_requests_by_response_code(503)
         data_504 = self.fetch_num_requests_by_response_code(504)
         if data_404:
-            res["flomesh_requests_total_404"] = data_404[-1][1]
+            res["istio_requests_total_404"] = data_404[-1][1]
         else:
-            res["flomesh_requests_total_404"] = "0"
+            res["istio_requests_total_404"] = "0"
         if data_503:
-            res["flomesh_requests_total_503"] = data_503[-1][1]
+            res["istio_requests_total_503"] = data_503[-1][1]
         else:
-            res["flomesh_requests_total_503"] = "0"
+            res["istio_requests_total_503"] = "0"
         if data_504:
-            res["flomesh_requests_total_504"] = data_504[-1][1]
+            res["istio_requests_total_504"] = data_504[-1][1]
         else:
-            res["flomesh_requests_total_504"] = "0"
+            res["istio_requests_total_504"] = "0"
         return res
 
     def fetch_sum_by_metric_name(self, metric, groupby=None):
@@ -250,8 +261,7 @@ class Prom:
 def flatten(data, metric, aggregate):
     res = {}
     for group, summary in data.items():
-        # remove - and flomesh- from group
-        grp = group.replace("flomesh-", "")
+        grp = group.replace("istio-", "")
         grp = grp.replace("-", "_")
         grp = grp.replace("/", "_")
         if aggregate:
@@ -274,7 +284,8 @@ def to_mili_cpus(cpu):
 
 
 DEPL_MAP = {
-    "fortio-server": "fortio-server"
+    "fortio-server": "fortioserver_deployment",
+    "fortio-client": "fortio_deployment"
 }
 
 
@@ -291,7 +302,10 @@ def metric_by_deployment_by_container(metric):
 
 
 # These deployments have columns in the table, so only these are watched.
-Watched_Deployments = set(["fortio-server"])
+Watched_Deployments = set(["istio-pilot",
+                           "fortio-server",
+                           "fortio-client",
+                           "istio-ingressgateway"])
 
 
 # returns deployment_name

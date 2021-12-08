@@ -1,63 +1,92 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: fortio-server
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - hosts:
+        - fortio-server.istio-system.apps.ocp1.example.com
+      port:
+        name: http
+        number: 80
+        protocol: HTTP
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: fortio-server
+spec:
+  gateways:
+    - fortio-server
+  hosts:
+    - fortio-server.istio-system.apps.ocp1.example.com
+  http:
+    - route:
+        - destination:
+            host: fortio-server
+            port:
+              number: 8080
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: fortio-server-raw
+spec:
+  to:
+    kind: Service
+    name: fortio-server
+    weight: 100
+  port:
+    targetPort: 8077
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: fortio-server
-  labels:
-    app: fortio-server
-    service: fortio-server
 spec:
-  type: NodePort
   ports:
-  - name: proxy
-    nodePort: 30990
-    port: 9090
-    protocol: TCP
-    targetPort: 9090
   - name: http-echo
-    nodePort: 30980
     port: 8080
-    protocol: TCP
     targetPort: 8080
+    protocol: TCP
+  - name: http-echoa
+    port: 8077
+    targetPort: 8077
+    protocol: TCP
   selector:
     app: fortio-server
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: fortio-server
-  labels:
-    account: fortio-server
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: fortio-server
   labels:
     app: fortio-server
-    version: v1
+  name: fortio-server
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: fortio-server
-      version: v1
   template:
     metadata:
+      annotations:
+        sidecar.istio.io/interceptionMode: REDIRECT
+        sidecar.istio.io/inject: "true"
+        traffic.sidecar.istio.io/excludeInboundPorts: "8077"
       labels:
         app: fortio-server
-        version: v1
-        sys: benchmark
-      annotations:
-        flomesh.io/inject: "true"
     spec:
-      serviceAccountName: fortio-server
       containers:
-      - name: fortio
-        image: fortio/fortio:1.17.0
-        imagePullPolicy: IfNotPresent
+      - name: captured
+        image:  fortio/fortio:latest_release
         ports:
-        - name: http-echo
-          containerPort: 8080
+        - containerPort: 8080
           protocol: TCP
-        securityContext:
-          runAsUser: 1000
+      - name: uncaptured
+        image: fortio/fortio:latest_release
+        args:
+        - server
+        - -http-port
+        - "8077"

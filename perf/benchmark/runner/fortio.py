@@ -99,7 +99,7 @@ def run_command(command):
     process.wait()
 
 
-def sync_fortio(json_path=".", selector=None, promUrl="", csv=None, csv_output=""):
+def sync_fortio(json_path=".", selector=None, promUrl="", promToken="", csv=None, csv_output=""):
     temp_dir_path = tempfile.gettempdir() + "/fortio_json_data"
     # get_fortio_json_cmd = "cp -fv {jsonpath}/*.json {tempdir}"\
     #     .format(jsonpath=json_path, tempdir=temp_dir_path)
@@ -156,8 +156,8 @@ def sync_fortio(json_path=".", selector=None, promUrl="", csv=None, csv_output="
                                METRICS_SUMMARY_DURATION)
                 print("duration=", duration)
                 print("prom_start=", prom_start)
-                p = prom.Prom(promUrl, duration, start=prom_start)
-                prom_metrics = p.fetch_pipy_sidecar_cpu_and_mem()
+                p = prom.Prom(promUrl, promToken, duration, start=prom_start)
+                prom_metrics = p.fetch_istio_proxy_cpu_and_mem()
                 if not prom_metrics:
                     print("... Not found")
                     continue
@@ -207,6 +207,7 @@ def main(argv):
         args.json_path,
         args.selector,
         args.prometheus,
+        args.prometheus_token,
         args.csv,
         args.csv_output)
 
@@ -229,6 +230,10 @@ def get_parser():
     parser.add_argument(
         "--prometheus",
         help="url to fetch prometheus results from. if blank, will only output Fortio metrics.",
+        default="")
+    parser.add_argument(
+        "--prometheus_token",
+        help="token for prometheus.",
         default="")
     return parser
 

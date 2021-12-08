@@ -17,10 +17,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-metric_dict = {"cpu-client": "cpu_mili_avg_pipy_sidecar_fortioclient",
-               "cpu-server": "cpu_mili_avg_pipy_sidecar_fortioserver",
-               "mem-client": "mem_Mi_avg_pipy_sidecar_fortioclient",
-               "mem-server": "mem_Mi_avg_pipy_sidecar_fortioserver"}
+metric_dict = {"cpu-client": "cpu_mili_avg_istio_proxy_fortio_client",
+               "cpu-server": "cpu_mili_avg_istio_proxy_fortio_server",
+               "mem-client": "mem_milli_avg_istio_proxy_fortio_client",
+               "mem-server": "mem_milli_avg_istio_proxy_fortio_server"}
 
 
 def plotter(args):
@@ -130,9 +130,9 @@ def get_y_label(args):
         metrics_type = args.graph_type.split("-")[1]
         return "Latency in milliseconds({type})".format(type=metrics_type)
     if args.graph_type.startswith("cpu"):
-        return 'pipy sidecar average CPUs (millicores)'
+        return 'Envoy sidecar average CPUs (millicores)'
     if args.graph_type.startswith("mem"):
-        return "pipy sidecar average Memory (Mi)"
+        return "Envoy sidecar average Memory (Mi)"
     return ""
 
 
