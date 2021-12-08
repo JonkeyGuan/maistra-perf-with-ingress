@@ -10,8 +10,10 @@ set -x
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 
-SVC_BASELINE_URL=http://fortio-server-raw-perf.apps.ocp1.example.com
-SVC_SIDECAR_URL=http://fortio-server.istio-system.apps.ocp1.example.com
+export DNS=${DNS:-'ocp1.example.com'}
+
+SVC_BASELINE_URL=http://fortio-server-raw-perf.apps.${DNS}
+SVC_SIDECAR_URL=http://fortio-server.istio-system.apps.${DNS}
 ECHO_RESP_SIZE=1024
 PAYLOAD_SIZE=512
 SVC_PATH="echo?size=${ECHO_RESP_SIZE}"
@@ -55,7 +57,7 @@ cp -fv "${JSON_PATH}"/*.json "${FORTIO_JSON_DATA_PATH}"
 
 STAMP=$(date '+%Y%m%d%H%M%S')_$(echo $RANDOM)
 export CSV_OUTPUT="$(mktemp /tmp/benchmark_${STAMP}.csv)"
-export PROMETHEUS_URL=https://prometheus-k8s-openshift-monitoring.apps.ocp1.example.com
+export PROMETHEUS_URL=https://prometheus-k8s-openshift-monitoring.apps.${DNS}
 export PROMETHEUS_TOKEN=$(oc whoami -t)
 
 pipenv run python3 runner/fortio.py --json_path="${JSON_PATH}" --prometheus=${PROMETHEUS_URL} --prometheus_token=${PROMETHEUS_TOKEN} --csv_output="$CSV_OUTPUT" --csv StartTime,ActualDuration,Labels,NumThreads,ActualQPS,p50,p75,p90,p99,p999,cpu_mili_avg_istio_proxy_fortio_server,mem_milli_avg_istio_proxy_fortio_server
