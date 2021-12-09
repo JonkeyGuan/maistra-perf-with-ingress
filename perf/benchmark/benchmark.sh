@@ -56,7 +56,7 @@ rm -fv "${FORTIO_JSON_DATA_PATH}"/*.json
 cp -fv "${JSON_PATH}"/*.json "${FORTIO_JSON_DATA_PATH}"
 
 STAMP=$(date '+%Y%m%d%H%M%S')_$(echo $RANDOM)
-export CSV_OUTPUT="$(mktemp /tmp/benchmark_${STAMP}.csv)"
+export CSV_OUTPUT="/tmp/benchmark_${STAMP}.csv"
 export PROMETHEUS_URL=https://prometheus-k8s-openshift-monitoring.apps.${DNS}
 export PROMETHEUS_TOKEN=$(oc whoami -t)
 
